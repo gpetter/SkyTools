@@ -4,7 +4,7 @@ import healpy as hp
 import numpy as np
 from astropy.table import Table, vstack
 from astropy.io import fits
-from . import healpixhelper
+from . import healpixhelper as myhp
 
 
 
@@ -31,6 +31,7 @@ def uniform_sphere(n, density=False, lat_range=(-90., 90.), lon_range=(0, 360.))
 	"""
 	min_lat, max_lat = lat_range
 	min_lon, max_lon = lon_range
+
 
 	# calculate total number given the surface density
 	if density:
@@ -71,9 +72,13 @@ def gen_rand_points_from_healpix(ras, decs, npoints, nside=32):
 
 
 def random_points_in_hp_mask(mask, npoints):
+
 	masknside = hp.npix2nside(len(mask))
+	# find the range of latitude the mask is defined to make random generation cheaper
+	pixlon, pixlat = myhp.healpixels2lon_lat(mask)
+	lat_range = np.min(pixlat), np.max(pixlat)
 	skyfraction = len(np.where(mask > 0)[0])/len(mask)
-	randlons, randlats = uniform_sphere(int(1/skyfraction * npoints))
+	randlons, randlats = uniform_sphere(int(1/skyfraction * npoints), lat_range=lat_range)
 
 	inmask = np.where(mask[hp.ang2pix(masknside, randlons, randlats, lonlat=True)] > 0)
 

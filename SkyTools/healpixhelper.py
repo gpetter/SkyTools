@@ -39,7 +39,10 @@ def healpix_average_in_pixels(ras, decs, nsides, values):
 	return avg_map
 
 
-
+def healpixels2lon_lat(hpmap):
+	nside = hp.npix2nside(len(hpmap))
+	lons, lats = hp.pix2ang(nside, np.arange(len(hpmap)), lonlat=True)
+	return lons, lats
 
 # take coordinates from 2 surveys with different footprints and return indices of sources within the overlap of both
 def match_footprints(testsample, reference_sample, nside=32):
@@ -166,8 +169,25 @@ def mask_from_pointings(coords, nside, pointing_radius=None, pointing_side=None,
 
 
 def query_annulus(nside, vec, inner_rad, outer_rad):
+	"""
+	Query the pixels in an annulus between r_min and r_max away from a central point
+
+	Parameters
+	----------
+	nside: int
+	vec: 3 tuple
+	inner_rad: float in degrees
+	outer_rad: float in degrees
+
+
+	Returns
+	-------
+	indices within the annulus
+
+	"""
 	big_disc = hp.query_disc(nside, vec, np.radians(outer_rad))
-	small_disc = hp.query_disc(nside, vec, np.radians(inner_rad))
+	small_disc = hp.query_disc(nside, vec, np.radians(inner_rad), inclusive=True)
+	# find indices which are in big_disc but not small_disc
 	annulus = np.setdiff1d(big_disc, small_disc, assume_unique=True)
 	return annulus
 
