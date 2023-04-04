@@ -11,9 +11,10 @@ wise_vega_ab = {'W1': 2.699, 'W2': 3.339, 'W3': 5.174, 'W4': 6.620}
 irac_vega_ab = {'IRAC1': 2.788, 'IRAC2': 3.255, 'IRAC3': 3.743, 'IRAC4': 4.372}
 
 def nmgy2mag(nmgys, ivars=None):
-    errs = 1. / np.sqrt(ivars)
+
     mags = 22.5 - 2.5 * np.log10(nmgys)
     if ivars is not None:
+        errs = 1. / np.sqrt(ivars)
         emags = 2.5 / np.log(10) * errs / nmgys
         return mags, emags
     return mags
@@ -94,7 +95,8 @@ def extrap_flux(flux, alpha, nu_obs, nu_want):
 
 def flux_at_any_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z):
     """
-
+    Given an observed flux at frequency nu_obs, a spectral index alpha, and redshift, get flux corresponding to
+    a rest-frame frequency nu_rest_want
     Parameters
     ----------
     obsflux
@@ -107,22 +109,52 @@ def flux_at_any_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z):
     -------
 
     """
-    # frequency in rest frame corresponding to bandpass in observed frame
-    nu_emit = (1. + z) * nu_obs
-    # k correct to that frequency
-    flux_nu_emit = extrap_flux(obsflux, alpha, nu_obs, nu_emit)
-    # k correct again from emitted frequency in rest frame corresponding to nu_obs
-    # to any other frequency in rest frame
-    flux_rest_nu = extrap_flux(flux_nu_emit, alpha, nu_emit, nu_rest_want)
+    # frequency in observed frame corresponding to rest frame frequency we want to probe
+    nu_obs_want = nu_rest_want / (1. + z)
+    # extrapolate observed flux to above freq
+    flux_rest_nu = extrap_flux(obsflux, alpha, nu_obs, nu_obs_want)
     return flux_rest_nu
 
 def luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=u.uJy):
+    """
+    Calculate rest frame luminosity at any given nu_rest_want, given an observed flux at nu_obs from source at z with
+    spectral index alpha
+    Parameters
+    ----------
+    obsflux
+    alpha
+    nu_obs
+    nu_rest_want
+    z
+    nu_unit
+    flux_unit
+
+    Returns
+    -------
+
+    """
     flux_rest_nu = flux_at_any_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z)
     nu_f_nu = nu_rest_want * flux_rest_nu * nu_unit * flux_unit
     nu_L_nu = ((4 * np.pi * apcosmo.luminosity_distance(z) ** 2) * nu_f_nu).to(u.erg/u.s).value
     return nu_L_nu
 
 def luminosity_at_rest_lam(obsflux, alpha, lam_obs, lam_rest_want, z, lam_unit=u.micron, flux_unit=u.uJy):
+    """
+    The same as luminosity_at_rest_nu but with wavelengths
+    Parameters
+    ----------
+    obsflux
+    alpha
+    lam_obs
+    lam_rest_want
+    z
+    lam_unit
+    flux_unit
+
+    Returns
+    -------
+
+    """
     nu_obs = (const.c / (lam_obs * lam_unit)).to(u.GHz)
     nu_rest_want = (const.c / (lam_rest_want * lam_unit)).to(u.GHz)
     return luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=flux_unit)

@@ -14,9 +14,9 @@ def proper_ud_grade_mask(mask, newnside):
 
 
 # for a given source list with ras and decs, create a healpix map of source density for a given pixel size
-def healpix_density_map(ras, decs, nsides, weights=None, deg2=False):
+def healpix_density_map(lons, lats, nsides, weights=None, deg2=False):
 	# convert coordinates to healpix pixels
-	pix_of_sources = hp.ang2pix(nsides, ras, decs, lonlat=True)
+	pix_of_sources = hp.ang2pix(nsides, lons, lats, lonlat=True)
 	# number of pixels for healpix map with nsides
 	npix = hp.nside2npix(nsides)
 	# count number of sources in each pixel
@@ -43,6 +43,25 @@ def healpixels2lon_lat(hpmap):
 	nside = hp.npix2nside(len(hpmap))
 	lons, lats = hp.pix2ang(nside, np.arange(len(hpmap)), lonlat=True)
 	return lons, lats
+
+
+def coords2mapvalues(lons, lats, map):
+	"""
+	Get healpix map values at specfied coordinates
+	Parameters
+	----------
+	lons: array
+	lats: array
+	map: array
+
+	Returns
+	-------
+	values of map in pixels corresponding to coordinates
+
+	"""
+	nside = hp.npix2nside(len(map))
+	pix = hp.ang2pix(nside, lons, lats, lonlat=True)
+	return map[pix]
 
 # take coordinates from 2 surveys with different footprints and return indices of sources within the overlap of both
 def match_footprints(testsample, reference_sample, nside=32):
