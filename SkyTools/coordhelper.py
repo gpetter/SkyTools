@@ -1,6 +1,7 @@
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import numpy as np
+from astropy.table import Table
 
 # convert ras and decs to galactic l, b coordinates
 def equatorial_to_galactic(ra, dec):

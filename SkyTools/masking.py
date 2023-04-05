@@ -36,7 +36,7 @@ def galactic_mask(nside, b_cut, gal_center_cut, galcoords=True):
 
 
 
-def mask_from_randoms(nside_out, randlons, randlats, random_density, sn_thresh=6.):
+def mask_from_randoms(nside_out, randlons, randlats, random_density, sn_thresh=6., dens_map=None):
     """
     Create a mask based on arrays of random coordinates characterizing the footprint
     Useful if you already have randoms and want to make a mask for e.g. cross correlation with CMB lensing
@@ -48,6 +48,8 @@ def mask_from_randoms(nside_out, randlons, randlats, random_density, sn_thresh=6
     randlats: array, random latitudes
     random_density: float, the sky density of randoms in 1/deg^2
     sn_thresh: float, the Poission S/N threshold of counts per pixel required
+    dens_map: array, optionally pass the density map already computed, use this if random catalog needs to be split
+    into multiple chunks to avoid memory overflow
 
     Returns
     -------
@@ -66,7 +68,9 @@ def mask_from_randoms(nside_out, randlons, randlats, random_density, sn_thresh=6
 
 
     mask = np.zeros(hp.nside2npix(nside))
-    dens_map = myhp.healpix_density_map(lons=randlons, lats=randlats, nsides=nside, deg2=True)
+
+    if dens_map is None:
+        dens_map = myhp.healpix_density_map(lons=randlons, lats=randlats, nsides=nside, deg2=True)
     mask[np.where(dens_map > 0)] = 1
 
     frac_area = dens_map / random_density
