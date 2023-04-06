@@ -45,6 +45,20 @@ def healpixels2lon_lat(hpmap):
 	return lons, lats
 
 
+def fractional_overdensity_map(hpmap):
+	"""
+
+	Parameters
+	----------
+	hpmap: array, map of counts in cells, is nan where masked
+
+	Returns
+	-------
+	overdensity delta map
+	"""
+	mapmean = np.nanmean(hpmap)
+	return (hpmap - mapmean) / mapmean
+
 def coords2mapvalues(lons, lats, map):
 	"""
 	Get healpix map values at specfied coordinates
@@ -141,6 +155,7 @@ def mask_from_pointings(coords, nside, pointing_radius=None, pointing_side=None,
 
 
 	lons, lats = coords
+	lons, lats = np.atleast_1d(lons), np.atleast_1d(lats)
 	# can pass values to set mask to, otherwise just set to 1
 	if fill_values is None:
 		fill_values = np.ones(len(lons))
