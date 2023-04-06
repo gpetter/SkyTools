@@ -2,6 +2,8 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 import numpy as np
 from astropy.table import Table
+from . import healpixhelper
+import healpy as hp
 
 # convert ras and decs to galactic l, b coordinates
 def equatorial_to_galactic(ra, dec):
@@ -117,8 +119,8 @@ def match_coords(catalog_or_coords1, catalog_or_coords2, max_sep=2., find_common
 	# keep only sources in a common footprint of both
 	if find_common_footprint:
 		# create density maps of each
-		dens1 = healpix_density_map(lons1, lats1, 16)
-		dens2 = healpix_density_map(lons2, lats2, 16)
+		dens1 = healpixhelper.healpix_density_map(lons1, lats1, 16)
+		dens2 = healpixhelper.healpix_density_map(lons2, lats2, 16)
 		# multiply together to find union
 		dens = dens1 * dens2
 		idxs1_in_footprint = np.where(dens[hp.ang2pix(16, lons1, lats1, lonlat=True)] > 0)[0]
