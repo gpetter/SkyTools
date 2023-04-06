@@ -158,3 +158,31 @@ def luminosity_at_rest_lam(obsflux, alpha, lam_obs, lam_rest_want, z, lam_unit=u
     nu_obs = (const.c / (lam_obs * lam_unit)).to(u.GHz)
     nu_rest_want = (const.c / (lam_rest_want * lam_unit)).to(u.GHz)
     return luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=flux_unit)
+
+def radio_sfr(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=u.uJy):
+    """
+    Murphy et al. 2011 SFR Eq. 14
+    Returns
+    -------
+
+    """
+    nu_l_nu = luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=nu_unit, flux_unit=flux_unit)
+    nu_hz = (nu_rest_want * nu_unit).to('Hz').value
+    nu_ghz = nu_hz / 1.e9
+    l_nu = nu_l_nu / nu_hz
+    sfr = 6.64e-29 * (nu_ghz ** -(alpha)) * l_nu
+    return sfr
+
+def sfr2radlum(sfr, alpha, rest_nu, nu_unit=u.GHz):
+    """
+    inversion of radio_sfr
+    Returns
+    -------
+
+    """
+    nu_ghz = (rest_nu * nu_unit).to(u.GHz).value
+    nu_hz = (rest_nu * nu_unit).to(u.Hz).value
+    l_nu = sfr * 1. / (6.64e-29) * (nu_ghz) ** (alpha)
+    return nu_hz * l_nu
+
+
