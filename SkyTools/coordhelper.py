@@ -1,7 +1,7 @@
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import numpy as np
-from astropy.table import Table
+from astropy.table import Table, vstack, hstack
 from . import healpixhelper
 import healpy as hp
 
@@ -85,7 +85,7 @@ def galactic_to_ecliptic(l, b):
 
 
 # find matches between two catalogs of coordinates
-def match_coords(catalog_or_coords1, catalog_or_coords2, max_sep=2., find_common_footprint=False):
+def match_coords(catalog_or_coords1, catalog_or_coords2, max_sep=2., find_common_footprint=False, symmetric=True):
 	"""
 
 	Parameters
@@ -136,8 +136,26 @@ def match_coords(catalog_or_coords1, catalog_or_coords2, max_sep=2., find_common
 	sep_constraint = np.where(d2d < max_sep)[0]
 	idx2 = original_idxs2[sep_constraint]
 	idx1 = original_idxs1[idx1[sep_constraint]]
+	if symmetric:
+		newidx2, d2d, d3d = skycoord1.match_to_catalog_sky(skycoord2)
+		sep_constraint = np.where(d2d < max_sep)[0]
+		newidx1 = original_idxs1[sep_constraint]
+		newidx2 = original_idxs2[newidx2[sep_constraint]]
+		idx1, idx2 = np.intersect1d(idx1, newidx1), np.intersect1d(idx2, newidx2)
+
 
 	if type(catalog_or_coords1) == Table:
 		return catalog_or_coords1[idx1], catalog_or_coords2[idx2]
 	else:
 		return idx1, idx2
+
+def match_cats_allfrom1st(cat1, cat2, sep):
+
+	idx1, idx2 = match_coords((cat1['RA'], cat1['DEC']), (cat2['RA'], cat2['DEC']), max_sep=sep)
+	cat2.rename_columns(['RA', 'DEC'], ['RA2', 'DEC2'])
+	unmatchedidx = np.where(np.logical_not(np.in1d(np.arange(len(cat1)), idx1)))[0]
+	matchcat1, unmatchcat = cat1[idx1], cat1[unmatchedidx]
+	matchcat = hstack((matchcat1, cat2[idx2]))
+
+	return vstack((matchcat, unmatchcat))
+

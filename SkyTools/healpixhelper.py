@@ -1,9 +1,6 @@
 import healpy as hp
 import numpy as np
-from astropy.table import Table
-from astropy.io import fits
-from astropy.coordinates import SkyCoord
-import astropy.units as u
+from scipy import stats
 
 # take a binary mask and properly downgrade it to a lower resolution, expanding the mask to cover all pixels which
 # touch bad pixels in the high res map
@@ -39,6 +36,48 @@ def healpix_average_in_pixels(ras, decs, nsides, values):
 	return avg_map
 
 
+def healpix_median_in_pixels(nside, coords, values):
+	# convert coordinates to healpix pixels
+	pix_of_sources = hp.ang2pix(nside, coords[0], coords[1], lonlat=True)
+	# number of pixels for healpix map with nsides
+	npix = hp.nside2npix(nside)
+	medmap = np.array(stats.binned_statistic(x=pix_of_sources, values=values,
+							statistic='median', bins=np.linspace(-0.5, npix - 0.5, npix + 1))[0])
+
+	return medmap
+
+
+def ud_grade_median(m, nside_out, reorder=True):
+	"""
+	Downgrade a map and take the median of the child pixels, rather than the default mean of healpy.ud_grade
+	Parameters
+	----------
+	m
+	nside_out
+	reorder
+
+	Returns
+	-------
+
+	"""
+	if reorder:
+		m = hp.reorder(m, 'RING', 'NEST')
+
+	nside_in = hp.npix2nside(len(m))
+	npix_in = hp.nside2npix(nside_in)
+	npix_out = hp.nside2npix(nside_out)
+
+	rat2 = npix_in // npix_out
+	mr = m.reshape(npix_out, rat2)
+	map_out = np.nanmedian(mr, axis=1)
+	map_out[~np.isfinite(map_out)] = np.nan
+
+	if reorder:
+		map_out = hp.reorder(map_out, 'NEST', 'RING')
+
+	return map_out
+
+
 def healpixels2lon_lat(hpmap):
 	nside = hp.npix2nside(len(hpmap))
 	lons, lats = hp.pix2ang(nside, np.arange(len(hpmap)), lonlat=True)
@@ -59,7 +98,7 @@ def fractional_overdensity_map(hpmap):
 	mapmean = np.nanmean(hpmap)
 	return (hpmap - mapmean) / mapmean
 
-def coords2mapvalues(lons, lats, map):
+def coords2mapvalues(lons, lats, map, nest=False):
 	"""
 	Get healpix map values at specfied coordinates
 	Parameters
@@ -74,7 +113,7 @@ def coords2mapvalues(lons, lats, map):
 
 	"""
 	nside = hp.npix2nside(len(map))
-	pix = hp.ang2pix(nside, lons, lats, lonlat=True)
+	pix = hp.ang2pix(nside, lons, lats, lonlat=True, nest=nest)
 	return map[pix]
 
 # take coordinates from 2 surveys with different footprints and return indices of sources within the overlap of both
@@ -316,3 +355,36 @@ def inmask(coords, mask, return_bool=False):
 		# get indices of those passing the mask
 		good = np.where(mask[coordpix] == 1)[0]
 	return good
+
+
+def subtract_dipole(
+		m, dipole, nest=False, bad=hp.UNSEEN, gal_cut=0, fitval=False, copy=True, verbose=True
+):
+	input_ma = hp.pixelfunc.is_ma(m)
+	m = hp.pixelfunc.ma_to_array(m)
+	m = np.array(m, copy=copy)
+	npix = m.size
+	nside = hp.npix2nside(npix)
+	if nside > 128:
+		bunchsize = npix // 24
+	else:
+		bunchsize = npix
+
+	for ibunch in range(npix // bunchsize):
+		ipix = np.arange(ibunch * bunchsize, (ibunch + 1) * bunchsize)
+		ipix = ipix[(m.flat[ipix] != bad) & (np.isfinite(m.flat[ipix]))]
+		x, y, z = hp.pix2vec(nside, ipix, nest)
+		m.flat[ipix] -= dipole[0] * x
+		m.flat[ipix] -= dipole[1] * y
+		m.flat[ipix] -= dipole[2] * z
+	# m.flat[ipix] -= mono
+
+	lon, lat = hp.rotator.vec2dir(dipole, lonlat=True)
+	amp = np.sqrt((dipole * dipole).sum())
+
+	if hp.pixelfunc.is_ma:
+		m = hp.pixelfunc.ma(m)
+	if fitval:
+		return m, mono, dipole
+	else:
+		return m

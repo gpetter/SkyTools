@@ -1,17 +1,22 @@
 import numpy as np
+import scipy.constants as cst
 import astropy.units as u
 import astropy.constants as const
 from colossus.cosmology import cosmology
 cosmo = cosmology.setCosmology('planck18')
 apcosmo = cosmo.toAstropy()
 
+
 # https://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec4_4h.html
 wise_vega_ab = {'W1': 2.699, 'W2': 3.339, 'W3': 5.174, 'W4': 6.620}
 # https://irsa.ipac.caltech.edu/data/COSMOS/gator_docs/scosmos_irac_colDescriptions.html
 irac_vega_ab = {'IRAC1': 2.788, 'IRAC2': 3.255, 'IRAC3': 3.743, 'IRAC4': 4.372}
 
-def nmgy2mag(nmgys, ivars=None):
 
+
+
+def nmgy2mag(nmgys, ivars=None):
+    nmgys = np.array(np.atleast_1d(nmgys))
     mags = 22.5 - 2.5 * np.log10(nmgys)
     if ivars is not None:
         errs = 1. / np.sqrt(ivars)
@@ -19,10 +24,20 @@ def nmgy2mag(nmgys, ivars=None):
         return mags, emags
     return mags
 
+def nmgy2flux(nmgys, ivars=None, flux_unit=u.uJy):
+    nmgys = np.array(np.atleast_1d(nmgys))
+    flux = ((3.631 * nmgys * u.uJy).to(flux_unit)).value
+    if ivars is not None:
+        errs = 1. / np.sqrt(ivars)
+        eflux = ((3.631 * errs * u.uJy).to(flux_unit)).value
+        return flux, eflux
+    return flux
+
 def flux2ABmag(flux, fluxunit=u.uJy):
     return -2.5 * np.log10((flux / 3631.) * (fluxunit / u.Jy).value)
 
 def magAB2flux(mag, fluxunit=u.uJy):
+    mag = np.array(np.atleast_1d(mag))
     return (3631. * u.Jy * 10. ** (mag / (-2.5))).to(fluxunit).value
 
 def wise_vega_to_ab(vegamags, filter):
@@ -138,7 +153,8 @@ def luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz
     nu_L_nu = ((4 * np.pi * apcosmo.luminosity_distance(z) ** 2) * nu_f_nu).to(u.erg/u.s).value
     return nu_L_nu
 
-def luminosity_at_rest_lam(obsflux, alpha, lam_obs, lam_rest_want, z, lam_unit=u.micron, flux_unit=u.uJy):
+def luminosity_at_rest_lam(obsflux_or_mag, alpha, lam_obs, lam_rest_want, z,
+                           lam_unit=u.micron, flux_unit=u.uJy, mag=False):
     """
     The same as luminosity_at_rest_nu but with wavelengths
     Parameters
@@ -155,8 +171,12 @@ def luminosity_at_rest_lam(obsflux, alpha, lam_obs, lam_rest_want, z, lam_unit=u
     -------
 
     """
-    nu_obs = (const.c / (lam_obs * lam_unit)).to(u.GHz)
-    nu_rest_want = (const.c / (lam_rest_want * lam_unit)).to(u.GHz)
+    obsflux = obsflux_or_mag
+    if mag:
+        obsflux = magAB2flux(obsflux_or_mag, fluxunit=flux_unit)
+
+    nu_obs = (const.c / (lam_obs * lam_unit)).to(u.GHz).value
+    nu_rest_want = (const.c / (lam_rest_want * lam_unit)).to(u.GHz).value
     return luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=flux_unit)
 
 def radio_sfr(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=u.uJy):
@@ -184,5 +204,27 @@ def sfr2radlum(sfr, alpha, rest_nu, nu_unit=u.GHz):
     nu_hz = (rest_nu * nu_unit).to(u.Hz).value
     l_nu = sfr * 1. / (6.64e-29) * (nu_ghz) ** (alpha)
     return nu_hz * l_nu
+
+
+
+# courtesy X-cigale Guang 2020
+# converts X-ray flux in erg/s/cm^2 to mJy
+def convt_Fx_to_Fnu(flux, flux_err, Elo, Eup):
+    nu_1keV = 1e3 * cst.eV / cst.h
+    '''
+    Convert X-ray flux to flux density
+    Input:
+        flux, flux of an X-ray band (untis: erg/s/cm2)
+              array-like objects
+        flux_err, the uncertainty of flux
+        Elo, Eup: observed-frame energy range of flux_xray (units: keV)
+    Output:
+        Fnu, X-ray flux density (units: mJy)
+        Fnu_err, the error of Fnu
+    '''
+    Fnu = np.array(flux) / (nu_1keV * (Eup-Elo) * 1e-26)
+    Fnu_err = np.array(flux_err) / (nu_1keV * (Eup-Elo) * 1e-26)
+
+    return Fnu, Fnu_err
 
 
