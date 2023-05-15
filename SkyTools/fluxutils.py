@@ -153,6 +153,25 @@ def luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz
     nu_L_nu = ((4 * np.pi * apcosmo.luminosity_distance(z) ** 2) * nu_f_nu).to(u.erg/u.s).value
     return nu_L_nu
 
+def flux_at_obsnu_from_rest_lum(nu_l_nu_rest, alpha, nu_rest, nu_obs_want, z, nu_unit=u.GHz,
+                             lum_unit=(u.erg/u.s), outflux_unit=u.uJy):
+    """
+    The inverse of luminosity_at_rest_nu
+    Given a luminosity at rest frame frequency nu_rest, calculate the predicted observed flux at a given nu_obs
+    Returns
+    -------
+
+    """
+    # if s_nu propto nu^alpha, then L_nu also propto nu^alpha
+    l_nu_rest = nu_l_nu_rest / nu_rest
+    # extrapolate l_nu rest to the rest frequency corresponding to the observed bandpass
+    l_nu_bandpass_rest = extrap_flux(l_nu_rest, alpha, nu_obs=nu_rest, nu_want=(1+z)*nu_obs_want)
+    f_nu_obs = (l_nu_bandpass_rest * lum_unit / nu_unit) / (4 * np.pi * apcosmo.luminosity_distance(z) ** 2)
+    return f_nu_obs.to(outflux_unit).value
+
+
+
+
 def luminosity_at_rest_lam(obsflux_or_mag, alpha, lam_obs, lam_rest_want, z,
                            lam_unit=u.micron, flux_unit=u.uJy, mag=False):
     """
@@ -219,11 +238,11 @@ def convt_Fx_to_Fnu(flux, flux_err, Elo, Eup):
         flux_err, the uncertainty of flux
         Elo, Eup: observed-frame energy range of flux_xray (units: keV)
     Output:
-        Fnu, X-ray flux density (units: mJy)
+        Fnu, X-ray flux density (units: uJy)
         Fnu_err, the error of Fnu
     '''
-    Fnu = np.array(flux) / (nu_1keV * (Eup-Elo) * 1e-26)
-    Fnu_err = np.array(flux_err) / (nu_1keV * (Eup-Elo) * 1e-26)
+    Fnu = 1000. * np.array(flux) / (nu_1keV * (Eup-Elo) * 1e-26)
+    Fnu_err = 1000. * np.array(flux_err) / (nu_1keV * (Eup-Elo) * 1e-26)
 
     return Fnu, Fnu_err
 
