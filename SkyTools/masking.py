@@ -36,7 +36,7 @@ def galactic_mask(nside, b_cut, gal_center_cut, galcoords=True):
 
 
 
-def mask_from_randoms(nside_out, randlons, randlats, random_density, sn_thresh=6., dens_map=None):
+def mask_from_randoms(nside_out, randlons, randlats, random_density=None, sn_thresh=6., dens_map=None):
     """
     Create a mask based on arrays of random coordinates characterizing the footprint
     Useful if you already have randoms and want to make a mask for e.g. cross correlation with CMB lensing
@@ -57,6 +57,12 @@ def mask_from_randoms(nside_out, randlons, randlats, random_density, sn_thresh=6
     """
     # given a random density, determine the resolution at which the Poisson noise isn't terrible,
     # i.e. at which a small fraction of pixels are expected to have zero randoms due to random fluctuation
+
+    if random_density is None:
+        foo = myhp.healpix_density_map(lons=randlons, lats=randlats, nsides=64, deg2=True)
+        foo[np.where(foo < 1)] = np.nan
+        random_density = np.nanmedian(foo)
+
     num_per_pix = []
     orders = np.arange(3, 13)
     for order in orders:
