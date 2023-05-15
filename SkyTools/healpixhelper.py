@@ -11,9 +11,9 @@ def proper_ud_grade_mask(mask, newnside):
 
 
 # for a given source list with ras and decs, create a healpix map of source density for a given pixel size
-def healpix_density_map(lons, lats, nsides, weights=None, deg2=False):
+def healpix_density_map(lons, lats, nsides, weights=None, deg2=False, nest=False):
 	# convert coordinates to healpix pixels
-	pix_of_sources = hp.ang2pix(nsides, lons, lats, lonlat=True)
+	pix_of_sources = hp.ang2pix(nsides, lons, lats, lonlat=True, nest=nest)
 	# number of pixels for healpix map with nsides
 	npix = hp.nside2npix(nsides)
 	# count number of sources in each pixel
