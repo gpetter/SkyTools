@@ -108,29 +108,9 @@ def extrap_flux(flux, alpha, nu_obs, nu_want):
     return flux * (nu_want / nu_obs) ** alpha
 
 
-def flux_at_any_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z):
-    """
-    Given an observed flux at frequency nu_obs, a spectral index alpha, and redshift, get flux corresponding to
-    a rest-frame frequency nu_rest_want
-    Parameters
-    ----------
-    obsflux
-    alpha
-    nu_obs
-    rest_nu_want
-    z
 
-    Returns
-    -------
 
-    """
-    # frequency in observed frame corresponding to rest frame frequency we want to probe
-    nu_obs_want = nu_rest_want / (1. + z)
-    # extrapolate observed flux to above freq
-    flux_rest_nu = extrap_flux(obsflux, alpha, nu_obs, nu_obs_want)
-    return flux_rest_nu
-
-def luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=u.uJy):
+def luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=u.uJy, energy=True):
     """
     Calculate rest frame luminosity at any given nu_rest_want, given an observed flux at nu_obs from source at z with
     spectral index alpha
@@ -143,15 +123,31 @@ def luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz
     z
     nu_unit
     flux_unit
+    energy: bool, True: nuLnu in erg/s, False: L_nu in W/Hz
 
     Returns
     -------
 
     """
-    flux_rest_nu = flux_at_any_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z)
-    nu_f_nu = nu_rest_want * flux_rest_nu * nu_unit * flux_unit
-    nu_L_nu = ((4 * np.pi * apcosmo.luminosity_distance(z) ** 2) * nu_f_nu).to(u.erg/u.s).value
-    return nu_L_nu
+    # frequency in observed frame corresponding to rest frame frequency we want to probe
+    nu_obs_want = nu_rest_want / (1. + z)
+    # extrapolate observed flux to above freq
+    # 1+z accounts for bandpass squeezing
+    flux_rest_nu = extrap_flux(obsflux, alpha, nu_obs, nu_obs_want) / (1. + z)
+    nu_f_nu = flux_rest_nu * flux_unit
+    # if you want nu L_nu in erg/s
+    if energy:
+        return (nu_rest_want * nu_unit *
+                (4 * np.pi * apcosmo.luminosity_distance(z) ** 2) * nu_f_nu).to('erg/s').value
+    # otherwise L_nu in W/Hz
+    else:
+        return ((4 * np.pi * apcosmo.luminosity_distance(z) ** 2) * nu_f_nu).to('W/Hz').value
+
+def rest_lum(obsflux, alpha, z, flux_unit=u.uJy):
+    return (obsflux * flux_unit * 4 * np.pi * apcosmo.luminosity_distance(z) ** 2 /
+            ((1 + z) ** (1 + alpha))).to('W/Hz').value
+
+
 
 def flux_at_obsnu_from_rest_lum(nu_l_nu_rest, alpha, nu_rest, nu_obs_want, z, nu_unit=u.GHz,
                              lum_unit=(u.erg/u.s), outflux_unit=u.uJy):
@@ -165,7 +161,7 @@ def flux_at_obsnu_from_rest_lum(nu_l_nu_rest, alpha, nu_rest, nu_obs_want, z, nu
     # if s_nu propto nu^alpha, then L_nu also propto nu^alpha
     l_nu_rest = nu_l_nu_rest / nu_rest
     # extrapolate l_nu rest to the rest frequency corresponding to the observed bandpass
-    l_nu_bandpass_rest = extrap_flux(l_nu_rest, alpha, nu_obs=nu_rest, nu_want=(1+z)*nu_obs_want)
+    l_nu_bandpass_rest = extrap_flux(l_nu_rest, alpha, nu_obs=nu_rest, nu_want=(1+z)*nu_obs_want) * (1. + z)
     f_nu_obs = (l_nu_bandpass_rest * lum_unit / nu_unit) / (4 * np.pi * apcosmo.luminosity_distance(z) ** 2)
     return f_nu_obs.to(outflux_unit).value
 
@@ -198,21 +194,20 @@ def luminosity_at_rest_lam(obsflux_or_mag, alpha, lam_obs, lam_rest_want, z,
     nu_rest_want = (const.c / (lam_rest_want * lam_unit)).to(u.GHz).value
     return luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=flux_unit)
 
-def radio_sfr(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=u.uJy):
+def radio_sfr_murphy(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=u.GHz, flux_unit=u.uJy):
     """
     Murphy et al. 2011 SFR Eq. 14
     Returns
     -------
 
     """
-    nu_l_nu = luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z, nu_unit=nu_unit, flux_unit=flux_unit)
-    nu_hz = (nu_rest_want * nu_unit).to('Hz').value
-    nu_ghz = nu_hz / 1.e9
-    l_nu = nu_l_nu / nu_hz
-    sfr = 6.64e-29 * (nu_ghz ** -(alpha)) * l_nu
+    l_nu = luminosity_at_rest_nu(obsflux, alpha, nu_obs, nu_rest_want, z,
+                                    nu_unit=nu_unit, flux_unit=flux_unit, energy=False)
+    nu_ghz = (nu_rest_want * nu_unit).to('GHz').value
+    sfr = 6.64e-22 * (nu_ghz ** -(alpha)) * l_nu
     return sfr
 
-def sfr2radlum(sfr, alpha, rest_nu, nu_unit=u.GHz):
+def sfr2radlum_murphy(sfr, alpha, rest_nu, nu_unit=u.GHz, energy=True):
     """
     inversion of radio_sfr
     Returns
@@ -221,8 +216,12 @@ def sfr2radlum(sfr, alpha, rest_nu, nu_unit=u.GHz):
     """
     nu_ghz = (rest_nu * nu_unit).to(u.GHz).value
     nu_hz = (rest_nu * nu_unit).to(u.Hz).value
-    l_nu = sfr * 1. / (6.64e-29) * (nu_ghz) ** (alpha)
-    return nu_hz * l_nu
+    l_nu = sfr * 1. / (6.64e-22) * (nu_ghz) ** (alpha)
+    if energy:
+        return 1e7 * nu_hz * l_nu
+    else:
+        return l_nu
+
 
 
 
