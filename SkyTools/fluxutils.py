@@ -149,20 +149,26 @@ def rest_lum(obsflux, alpha, z, flux_unit=u.uJy):
 
 
 
-def flux_at_obsnu_from_rest_lum(nu_l_nu_rest, alpha, nu_rest, nu_obs_want, z, nu_unit=u.GHz,
-                             lum_unit=(u.erg/u.s), outflux_unit=u.uJy):
+def flux_at_obsnu_from_rest_lum(l_rest, alpha, nu_rest, nu_obs_want, z, nu_unit=u.GHz, outflux_unit=u.uJy, energy=True):
     """
     The inverse of luminosity_at_rest_nu
     Given a luminosity at rest frame frequency nu_rest, calculate the predicted observed flux at a given nu_obs
+
+    energy: bool, True: input luminosity in erg/s, False: in W/Hz
+
     Returns
     -------
 
     """
-    # if s_nu propto nu^alpha, then L_nu also propto nu^alpha
-    l_nu_rest = nu_l_nu_rest / nu_rest
+    if energy:
+        # if s_nu propto nu^alpha, then L_nu also propto nu^alpha
+        l_nu_rest = ((l_rest * u.erg/u.s) / (nu_rest * nu_unit)).to('W/Hz').value
+    else:
+        l_nu_rest = l_rest
+
     # extrapolate l_nu rest to the rest frequency corresponding to the observed bandpass
     l_nu_bandpass_rest = extrap_flux(l_nu_rest, alpha, nu_obs=nu_rest, nu_want=(1+z)*nu_obs_want) * (1. + z)
-    f_nu_obs = (l_nu_bandpass_rest * lum_unit / nu_unit) / (4 * np.pi * apcosmo.luminosity_distance(z) ** 2)
+    f_nu_obs = (l_nu_bandpass_rest * (u.W / u.Hz)) / (4 * np.pi * apcosmo.luminosity_distance(z) ** 2)
     return f_nu_obs.to(outflux_unit).value
 
 

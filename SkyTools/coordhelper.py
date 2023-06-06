@@ -94,6 +94,7 @@ def match_coords(catalog_or_coords1, catalog_or_coords2, max_sep=2., find_common
 	catalog_or_coords2: same as 1
 	max_sep: float in units of arcsec
 	find_common_footprint: bool
+	symmetric: bool: if True, symmetric best match a la TOPCAT, otherwise best match for each row in catalog 2
 
 	Returns
 	-------
@@ -158,4 +159,27 @@ def match_cats_allfrom1st(cat1, cat2, sep):
 	matchcat = hstack((matchcat1, cat2[idx2]))
 
 	return vstack((matchcat, unmatchcat))
+
+def match2duncan(cat, sep):
+	mindec, maxdec = np.min(cat['DEC']), np.max(cat['DEC'])
+	duncanpath = '/home/graysonpetter/ssd/Dartmouth/data/photozs/duncan_allsky/'
+	import glob
+	photfiles = glob.glob(duncanpath + 'dec*')
+	outcat = Table()
+	for photfile in photfiles:
+		photmin = float(photfile.split('dec_')[1].split('_')[0])
+		photmax = float(photfile.split('dec_')[1].split('_')[1].split('.')[0])
+		if (photmin > maxdec) | (photmax < mindec):
+			continue
+		else:
+			phottab = Table.read(photfile)
+			thiscat = cat[np.where((cat['DEC'] >= photmin) & (cat['DEC'] <= photmax))]
+
+			photidx, catidx = match_coords((phottab['ra'], phottab['dec']), (thiscat['RA'], thiscat['DEC']), max_sep=sep, symmetric=False)
+			thiscat = thiscat[catidx]
+			thiscat['zphot'] = phottab['zphot'][photidx]
+			thiscat['zphot_err'] = phottab['zphot_err'][photidx]
+			outcat = vstack((outcat, thiscat))
+	return outcat
+
 
