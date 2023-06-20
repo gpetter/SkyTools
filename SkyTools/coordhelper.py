@@ -104,12 +104,12 @@ def match_coords(catalog_or_coords1, catalog_or_coords2, max_sep=2., find_common
 	max_sep *= u.arcsec
 
 	if type(catalog_or_coords1) == Table:
-		lons1, lats1 = catalog_or_coords1['RA'], catalog_or_coords1['DEC']
-		lons2, lats2 = catalog_or_coords2['RA'], catalog_or_coords2['DEC']
+		lons1, lats1 = np.array(catalog_or_coords1['RA']), np.array(catalog_or_coords1['DEC'])
+		lons2, lats2 = np.array(catalog_or_coords2['RA']), np.array(catalog_or_coords2['DEC'])
 	else:
 		# unpack coordinates
-		lons1, lats1 = catalog_or_coords1
-		lons2, lats2 = catalog_or_coords2
+		lons1, lats1 = (np.array(catalog_or_coords1[0]), np.array(catalog_or_coords1[1]))
+		lons2, lats2 = (np.array(catalog_or_coords2[0]), np.array(catalog_or_coords2[1]))
 	# keep track of original indices
 	original_idxs1 = np.arange(len(lons1))
 	original_idxs2 = np.arange(len(lons2))
@@ -130,8 +130,8 @@ def match_coords(catalog_or_coords1, catalog_or_coords2, max_sep=2., find_common
 		lons2, lats2 = lons2[idxs2_in_footprint], lats2[idxs2_in_footprint]
 		original_idxs1, original_idxs2 = idxs1_in_footprint, idxs2_in_footprint
 
-	skycoord1 = SkyCoord(lons1*u.deg, lats1*u.deg, frame='icrs')
-	skycoord2 = SkyCoord(lons2*u.deg, lats2*u.deg, frame='icrs')
+	skycoord1 = SkyCoord(np.array(lons1)*u.deg, np.array(lats1)*u.deg, frame='icrs')
+	skycoord2 = SkyCoord(np.array(lons2)*u.deg, np.array(lats2)*u.deg, frame='icrs')
 
 	idx1, d2d, d3d = skycoord2.match_to_catalog_sky(skycoord1)
 	sep_constraint = np.where(d2d < max_sep)[0]

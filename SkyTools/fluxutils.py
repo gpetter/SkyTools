@@ -12,7 +12,16 @@ wise_vega_ab = {'W1': 2.699, 'W2': 3.339, 'W3': 5.174, 'W4': 6.620}
 # https://irsa.ipac.caltech.edu/data/COSMOS/gator_docs/scosmos_irac_colDescriptions.html
 irac_vega_ab = {'IRAC1': 2.788, 'IRAC2': 3.255, 'IRAC3': 3.743, 'IRAC4': 4.372}
 
-
+def r90_assef(w1, w2):
+    w1 = np.array(w1)
+    w2 = np.array(w2)
+    alpha, beta, gamma = 0.65, 0.153, 13.86
+    return ((w1 - w2 > alpha) & (w2 <= gamma)) | (w1 - w2 > alpha * np.exp(beta * np.square(w2 - gamma)))
+def r75_assef(w1, w2):
+    w1 = np.array(w1)
+    w2 = np.array(w2)
+    alpha, beta, gamma = 0.486, 0.092, 13.07
+    return ((w1 - w2 > alpha) & (w2 <= gamma)) | (w1 - w2 > alpha * np.exp(beta * np.square(w2 - gamma)))
 
 
 def nmgy2mag(nmgys, ivars=None):
@@ -228,7 +237,11 @@ def sfr2radlum_murphy(sfr, alpha, rest_nu, nu_unit=u.GHz, energy=True):
     else:
         return l_nu
 
+def best23_sfr2lum150(sfr):
+    return 22.24 + 1.08 * np.log10(sfr)
 
+def best23_lum150_2sfr(loglum150):
+    return 10 ** ((loglum150 - 22.24) / 1.08)
 
 
 # courtesy X-cigale Guang 2020
