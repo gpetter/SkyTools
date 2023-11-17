@@ -61,6 +61,23 @@ def irac_vega_to_ab(vegamags, filter):
 def irac_ab_to_vega(abmags, filter):
     return abmags - irac_vega_ab[filter]
 
+def spectral_index(f1, f2, nu1, nu2):
+    """
+
+    Parameters
+    ----------
+    f1: flux 1
+    f2: flux 2
+    nu1: frequency 1
+    nu2: frequency 2
+
+    Returns
+    -------
+    alpha: spectral index
+
+    """
+    return np.log(f1 / f2) / np.log(nu1 / nu2)
+
 
 def restframe_luminosity(wavelengths, fluxes, z, fluxerrs=None, wavunit=u.micron, fluxunit=u.uJy):
     """
@@ -115,7 +132,6 @@ def extrap_flux(flux, alpha, nu_obs, nu_want):
 
     """
     return flux * (nu_want / nu_obs) ** alpha
-
 
 
 

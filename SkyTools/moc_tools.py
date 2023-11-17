@@ -193,5 +193,3 @@ def use_highres_masks(data=True):
 
 
 	catalog.write(writename, format='fits', overwrite=True)
-
-
