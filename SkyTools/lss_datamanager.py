@@ -142,6 +142,8 @@ def reduce_ebossQSO(rezaie=True, combine=True, nrandratio=20):
     ngcdat['imag'][ngcidx] = dr16_lyke['PSFMAG'][:, 3][lykeidx] - dr16_lyke['EXTINCTION'][:, 3][lykeidx]
     bad_lbols = np.where(lbols < 43)
     lbols[bad_lbols] = -1. / 2.3 * m_i[bad_lbols] + 35.
+    ngcdat['gaia_G'] = np.full(len(ngcdat), np.nan)
+    ngcdat['gaia_G'][ngcidx] = dr16_lyke['GAIA_G_MAG'][lykeidx]
 
     ngcdat['Lbol'][ngcidx] = lbols
     ngcdat['BAL_PROB'][ngcidx] = dr16_lyke['BAL_PROB'][lykeidx]
@@ -170,6 +172,8 @@ def reduce_ebossQSO(rezaie=True, combine=True, nrandratio=20):
     sgcdat['imag'][sgcidx] = dr16_lyke['PSFMAG'][:, 3][lykeidx] - dr16_lyke['EXTINCTION'][:, 3][lykeidx]
     bad_lbols = np.where(lbols < 43)
     lbols[bad_lbols] = -1. / 2.3 * m_i[bad_lbols] + 35.
+    sgcdat['gaia_G'] = np.full(len(sgcdat), np.nan)
+    sgcdat['gaia_G'][sgcidx] = dr16_lyke['GAIA_G_MAG'][lykeidx]
     sgcdat['Lbol'][sgcidx] = lbols
     sgcdat['BAL_PROB'] = np.full(len(sgcdat), np.nan)
     sgcdat['BAL_PROB'][sgcidx] = dr16_lyke['BAL_PROB'][lykeidx]
@@ -185,8 +189,8 @@ def reduce_ebossQSO(rezaie=True, combine=True, nrandratio=20):
 
     ngcdat['weight'] = ngcdat['WEIGHT_SYSTOT'] * ngcdat['WEIGHT_CP'] * ngcdat['WEIGHT_NOZ']
     sgcdat['weight'] = sgcdat['WEIGHT_SYSTOT'] * sgcdat['WEIGHT_CP'] * sgcdat['WEIGHT_NOZ']
-    ngcdat = ngcdat['RA', 'DEC', 'Z', 'CHI', 'weight', 'MBH', 'Lbol', 'gmag', 'imag', 'BAL_PROB', 'sigZ']
-    sgcdat = sgcdat['RA', 'DEC', 'Z', 'CHI', 'weight', 'MBH', 'Lbol', 'gmag', 'imag', 'BAL_PROB', 'sigZ']
+    ngcdat = ngcdat['RA', 'DEC', 'Z', 'CHI', 'weight', 'MBH', 'Lbol', 'gmag', 'imag', 'BAL_PROB', 'sigZ', 'gaia_G']
+    sgcdat = sgcdat['RA', 'DEC', 'Z', 'CHI', 'weight', 'MBH', 'Lbol', 'gmag', 'imag', 'BAL_PROB', 'sigZ', 'gaia_G']
     if combine:
         totdat = vstack((ngcdat, sgcdat))
     else:
@@ -211,6 +215,48 @@ def reduce_ebossQSO(rezaie=True, combine=True, nrandratio=20):
     else:
         totrand = ngcrand
     totrand.write(outdir + 'eBOSS_QSO_randoms.fits', overwrite=True)
+
+
+def reduce_eBOSS_LRGs(cmass=True, nrandratio=20):
+    thisdir = rawdir + 'eBOSS/LRG/'
+    outdir = datadir + '/lss/eBOSS_LRG/'
+
+    which = ''
+    if cmass:
+        which = 'pCMASS'
+
+    ngcdat = Table.read(thisdir + 'eBOSS_LRG%s_clustering_data-NGC-vDR16.fits' % which)
+    sgcdat = Table.read(thisdir + 'eBOSS_LRG%s_clustering_data-SGC-vDR16.fits' % which)
+
+    # ngcdat['L2'] = np.log10(fluxutils.luminosity_at_rest_lam(ngcdat['zmag'], 0, .9, 2., ngcdat['Z'], mag=True))
+
+    ngcdat['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(ngcdat['Z']))
+    sgcdat['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(sgcdat['Z']))
+
+    ngcdat['weight'] = ngcdat['WEIGHT_SYSTOT'] * ngcdat['WEIGHT_CP'] * ngcdat['WEIGHT_NOZ']
+    sgcdat['weight'] = sgcdat['WEIGHT_SYSTOT'] * sgcdat['WEIGHT_CP'] * sgcdat['WEIGHT_NOZ']
+    ngcdat = ngcdat['RA', 'DEC', 'Z', 'CHI', 'weight', 'ISCMASS', 'IN_EBOSS_FOOT']
+    sgcdat = sgcdat['RA', 'DEC', 'Z', 'CHI', 'weight', 'ISCMASS', 'IN_EBOSS_FOOT']
+    totdat = vstack((ngcdat, sgcdat))
+    totdat.write(outdir + 'eBOSS_LRG.fits', overwrite=True)
+
+
+    ngcrand = Table(np.random.permutation(Table.read('raw/eBOSS_LRG%s_clustering_random-NGC-vDR16.fits' % which)))
+    ngcrand = ngcrand[:(nrandratio * len(ngcdat))]
+    sgcrand = Table(np.random.permutation(Table.read('raw/eBOSS_LRG%s_clustering_random-SGC-vDR16.fits' % which)))
+    sgcrand = sgcrand[:(nrandratio * len(sgcdat))]
+
+    ngcrand['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(ngcrand['Z']))
+    sgcrand['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(sgcrand['Z']))
+
+    ngcrand['weight'] = ngcrand['WEIGHT_SYSTOT'] * ngcrand['WEIGHT_CP'] * ngcrand['WEIGHT_NOZ']
+    sgcrand['weight'] = sgcrand['WEIGHT_SYSTOT'] * sgcrand['WEIGHT_CP'] * sgcrand['WEIGHT_NOZ']
+    ngcrand = ngcrand['RA', 'DEC', 'Z', 'CHI', 'weight', 'ISCMASS', 'IN_EBOSS_FOOT']
+    sgcrand = sgcrand['RA', 'DEC', 'Z', 'CHI', 'weight', 'ISCMASS', 'IN_EBOSS_FOOT']
+
+    totrand = Table(np.random.permutation(vstack((ngcrand, sgcrand))))
+    totrand.write(outdir + 'eBOSS_LRG_randoms.fits', overwrite=True)
+
 
 def reduce_quaia():
     thisdir = rawdir + 'quaia/'
@@ -246,31 +292,47 @@ def reduce_quaia():
 
 
 
-def get_ebossQSO(minz=0.8, maxz=3.5):
+def get_ebossQSO(minz=0.8, maxz=3.5, quaiacut=None):
     qso = Table.read(datadir + '/lss/eBOSS_QSO/eBOSS_QSO.fits')
     rand = Table.read(datadir + '/lss/eBOSS_QSO/eBOSS_QSO_randoms.fits')
+    if quaiacut is not None:
+        qso = qso[np.where((qso['gaia_G'] < quaiacut) & (qso['gaia_G'] > 0))]
     return qso, rand
 
-def get_desiLRG(minz=0.8, maxz=3.5):
+def get_desiLRG_edr(minz=0.8, maxz=3.5):
     lrg = Table.read(datadir + '/lss/desiLRG_edr/desiLRG_edr.fits')
     rand = Table.read(datadir + '/lss/desiLRG_edr/desiLRG_edr_randoms.fits')
     return lrg, rand
 
-def desiQSO_ebosslike():
-    from mocpy import MOC
+def get_desiQSO_edr(ebosslike=False):
+    """
+    Fetch DESI EDR QSOs. optionally find those which would have been observed by eBOSS by matching to XDQSO
+    Parameters
+    ----------
+    ebosslike
+
+    Returns
+    -------
+
+    """
     qso = Table.read(datadir + '/lss/desiQSO_edr/desiQSO_edr.fits')
-    xdqso = Table.read(datadir + '/QSO_cats/xdqso-z-cat.fits')
-    foo, qso = coordhelper.match_coords(xdqso, qso, symmetric=False, max_sep=1.)
-    qso = table_tools.filter_table_property(qso, 'Z', 0.8)
     rand = Table.read(datadir + '/lss/desiQSO_edr/desiQSO_edr_randoms.fits')
-    rand = table_tools.filter_table_property(rand, 'Z', 0.8)
 
-    sdss_u = MOC.from_fits('../../footprints/sdss/sdss9_u.fits')
-    qso = qso[sdss_u.contains(qso['RA']*u.deg, qso['DEC']*u.deg)]
-    rand = rand[sdss_u.contains(rand['RA']*u.deg, rand['DEC']*u.deg)]
+    if ebosslike:
+        from mocpy import MOC
 
+        xdqso = Table.read(datadir + '/QSO_cats/xdqso-z-cat.fits')
+        foo, qso = coordhelper.match_coords(xdqso, qso, symmetric=False, max_sep=1.)
+        qso = table_tools.filter_table_property(qso, 'Z', 0.8)
 
+        rand = table_tools.filter_table_property(rand, 'Z', 0.8)
+
+        sdss_u = MOC.from_fits('../../footprints/sdss/sdss9_u.fits')
+        qso = qso[sdss_u.contains(qso['RA'] * u.deg, qso['DEC'] * u.deg)]
+        rand = rand[sdss_u.contains(rand['RA'] * u.deg, rand['DEC'] * u.deg)]
     return qso, rand
+
+
 
 def get_quaia(maglim='20'):
     """
