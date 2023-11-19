@@ -320,16 +320,51 @@ def get_desiQSO_edr(ebosslike=False):
 
     if ebosslike:
         from mocpy import MOC
+        qso = table_tools.filter_table_property(qso, 'Z', 0.8)
+        rand = table_tools.filter_table_property(rand, 'Z', 0.8)
+        sdss_u = MOC.from_fits(datadir + '/footprints/sdss/sdss9_u.fits')
+        qso = qso[sdss_u.contains(qso['RA'] * u.deg, qso['DEC'] * u.deg)]
+        rand = rand[sdss_u.contains(rand['RA'] * u.deg, rand['DEC'] * u.deg)]
+
+        alldesi = qso.copy()
+        alldesirand = rand.copy()
 
         xdqso = Table.read(datadir + '/QSO_cats/xdqso-z-cat.fits')
         foo, qso = coordhelper.match_coords(xdqso, qso, symmetric=False, max_sep=1.)
-        qso = table_tools.filter_table_property(qso, 'Z', 0.8)
 
-        rand = table_tools.filter_table_property(rand, 'Z', 0.8)
+        # DESI QSOs targeted by eBOSS have different dndz
+        # need to downsample random catalog to match the new dndz
+        ntot2nboss = np.sum(alldesi['weight']) / np.sum(qso['weight'])
+        ebosshist, binedges = np.histogram(qso['Z'], bins=15, range=(0.8, 3.5), weights=qso['weight'])
+        allhist, binedges = np.histogram(alldesi['Z'], bins=15, range=(0.8, 3.5), weights=alldesi['weight'])
+        eboss_all_ratio = ntot2nboss * ebosshist / allhist
 
-        sdss_u = MOC.from_fits('../../footprints/sdss/sdss9_u.fits')
-        qso = qso[sdss_u.contains(qso['RA'] * u.deg, qso['DEC'] * u.deg)]
-        rand = rand[sdss_u.contains(rand['RA'] * u.deg, rand['DEC'] * u.deg)]
+        # downsampling
+        pdraw = eboss_all_ratio[np.digitize(rand['Z'], binedges) - 1]
+        pdraw /= np.sum(pdraw)
+        rand = rand[np.random.choice(len(rand), int(len(rand) / 1.5), replace=False, p=pdraw)]
+
+        # now need to weight DESIxeBOSS quasars to have same weighted dndz as eBOSS-only catalog
+
+        def weight_dndz1_to_dndz2(cat1, cat2, zbins=15):
+            minz1, maxz1 = np.min(cat1['Z']), np.max(cat1['Z'])
+            minz2, maxz2 = np.min(cat2['Z']), np.max(cat2['Z'])
+
+            minz = np.min([minz1, minz2]) - 0.01
+            maxz = np.max([maxz1, maxz2]) + 0.01
+
+            zhist1, edges = np.histogram(cat1['Z'], bins=zbins, range=(minz, maxz), density=True)
+            zhist2, edges = np.histogram(cat2['Z'], bins=zbins, range=(minz, maxz), density=True)
+
+            ratio = zhist2 / zhist1
+            cat1['zweight'] = ratio[np.digitize(cat1['Z'], bins=edges) - 1]
+            cat1['weight'] *= cat1['zweight']
+            return cat1
+        ebossqso, ebossrand = get_ebossQSO()
+        qso = weight_dndz1_to_dndz2(qso, ebossrand)
+        rand = weight_dndz1_to_dndz2(rand, ebossrand)
+
+
     return qso, rand
 
 
