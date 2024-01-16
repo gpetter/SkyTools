@@ -97,6 +97,38 @@ def reduce_desiEDR_lrg(main=True):
     lrg.write(outdir + 'desiLRG_edr.fits', overwrite=True)
     lrg_rand.write(outdir + 'desiLRG_edr_randoms.fits', overwrite=True)
 
+def reduce_desiEDR_elg(notqso=True):
+    """
+    Prepare DESI EDR LRG catalogs
+
+    """
+    thisdir = rawdir + 'desi_edr/'
+    outdir = datadir + '/lss/desiELG_edr/'
+    if notqso:
+        mainkey = 'notqso'
+    else:
+        mainkey = ''
+    elg_n = Table.read(thisdir + 'ELG%s_N_clustering.dat.fits' % mainkey)
+    elg_s = Table.read(thisdir + 'ELG%s_S_clustering.dat.fits' % mainkey)
+    elg_rand_n = Table.read(thisdir + 'ELG%s_N_0_clustering.ran.fits' % mainkey)
+    elg_rand_s = Table.read(thisdir + 'ELG%s_S_0_clustering.ran.fits' % mainkey)
+
+    elg_n['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(elg_n['Z']))
+    elg_s['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(elg_s['Z']))
+    elg_rand_n['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(elg_rand_n['Z']))
+    elg_rand_s['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(elg_rand_s['Z']))
+
+    elg_n['weight'] = elg_n['WEIGHT'] * elg_n['WEIGHT_FKP']
+    elg_s['weight'] = elg_s['WEIGHT'] * elg_s['WEIGHT_FKP']
+    elg_rand_n['weight'] = elg_rand_n['WEIGHT'] * elg_rand_n['WEIGHT_FKP']
+    elg_rand_s['weight'] = elg_rand_s['WEIGHT'] * elg_rand_s['WEIGHT_FKP']
+
+    lrg = vstack((elg_n, elg_s))
+    lrg_rand = vstack((elg_rand_n, elg_rand_s))
+
+    lrg.write(outdir + 'desiELG_edr.fits', overwrite=True)
+    lrg_rand.write(outdir + 'desiELG_edr_randoms.fits', overwrite=True)
+
 def reduce_ebossQSO(rezaie=True, combine=True, nrandratio=20):
     thisdir = rawdir + 'eBOSS/QSO/'
     outdir = datadir + '/lss/eBOSS_QSO/'
@@ -290,6 +322,38 @@ def reduce_quaia():
         rand.write(outdir + 'quaia_randoms%s.fits' % mag, overwrite=True)
 
 
+def reduce_hsc_lbg(dropout='g', deeplim=True):
+    import glob
+    import pandas as pd
+    thisdir = rawdir + 'hsc_lbg/'
+    outdir = datadir + '/lss/HSC_LBG/'
+    if dropout == 'g':
+        dirname = 'gri'
+        if deeplim:
+            maglim='24.00'
+        else:
+            maglim = '23.50'
+    else:
+        dirname = 'riz'
+        if deeplim:
+            maglim = '24.50'
+        else:
+            maglim = '24.00'
+
+    datfiles = glob.glob(thisdir + dirname + '/' + '*_%s_*_W_*.cat' % maglim)
+    randfiles = glob.glob(thisdir + dirname + '/' + '*_random_W_*.cat')
+
+    dattab = Table()
+    randtab = Table()
+    for datfile in datfiles:
+        datdf = pd.read_csv(datfile, delim_whitespace=True, names=['RA', 'DEC', 'jackknife'])
+        dattab = vstack((dattab, Table.from_pandas(datdf)))
+    for randfile in randfiles:
+        randdf = pd.read_csv(randfile, delim_whitespace=True, names=['RA', 'DEC', 'jackknife'])
+        randtab = vstack((randtab, Table.from_pandas(randdf)))
+
+    dattab.write(outdir + 'HSC_LBG_%s.fits' % dropout, overwrite=True)
+    randtab.write(outdir + 'HSC_LBG_%s_randoms.fits' % dropout, overwrite=True)
 
 
 def get_ebossQSO(minz=0.8, maxz=3.5, quaiacut=None):
@@ -297,14 +361,33 @@ def get_ebossQSO(minz=0.8, maxz=3.5, quaiacut=None):
     rand = Table.read(datadir + '/lss/eBOSS_QSO/eBOSS_QSO_randoms.fits')
     if quaiacut is not None:
         qso = qso[np.where((qso['gaia_G'] < quaiacut) & (qso['gaia_G'] > 0))]
+    qso = table_tools.filter_table_property(qso, 'Z', minval=minz, maxval=maxz)
+    rand = table_tools.filter_table_property(rand, 'Z', minval=minz, maxval=maxz)
     return qso, rand
 
-def get_desiLRG_edr(minz=0.8, maxz=3.5):
+def get_desiLRG_edr(minz=None, maxz=None):
     lrg = Table.read(datadir + '/lss/desiLRG_edr/desiLRG_edr.fits')
     rand = Table.read(datadir + '/lss/desiLRG_edr/desiLRG_edr_randoms.fits')
+    if minz is not None:
+        lrg = lrg[np.where(lrg['Z'] >= minz)]
+        rand = rand[np.where(rand['Z'] >= minz)]
+    if maxz is not None:
+        lrg = lrg[np.where(lrg['Z'] <= maxz)]
+        rand = rand[np.where(rand['Z'] <= maxz)]
     return lrg, rand
 
-def get_desiQSO_edr(ebosslike=False):
+def get_desiELG_edr(minz=None, maxz=None):
+    elg = Table.read(datadir + '/lss/desiELG_edr/desiELG_edr.fits')
+    rand = Table.read(datadir + '/lss/desiELG_edr/desiELG_edr_randoms.fits')
+    if minz is not None:
+        elg = elg[np.where(elg['Z'] >= minz)]
+        rand = rand[np.where(rand['Z'] >= minz)]
+    if maxz is not None:
+        elg = elg[np.where(elg['Z'] <= maxz)]
+        rand = rand[np.where(rand['Z'] <= maxz)]
+    return elg, rand
+
+def get_desiQSO_edr(ebosslike=False, minz=None, maxz=None):
     """
     Fetch DESI EDR QSOs. optionally find those which would have been observed by eBOSS by matching to XDQSO
     Parameters
@@ -363,6 +446,12 @@ def get_desiQSO_edr(ebosslike=False):
         ebossqso, ebossrand = get_ebossQSO()
         qso = weight_dndz1_to_dndz2(qso, ebossrand)
         rand = weight_dndz1_to_dndz2(rand, ebossrand)
+    if minz is not None:
+        qso = qso[np.where(qso['Z'] >= minz)]
+        rand = rand[np.where(rand['Z'] >= minz)]
+    if maxz is not None:
+        qso = qso[np.where(qso['Z'] <= maxz)]
+        rand = rand[np.where(rand['Z'] <= maxz)]
 
 
     return qso, rand
@@ -383,3 +472,8 @@ def get_quaia(maglim='20'):
     qso = Table.read(datadir + '/lss/quaia/quaia%s.fits' % maglim)
     rand = Table.read(datadir + '/lss/quaia/quaia_randoms%s.fits' % maglim)
     return qso, rand
+
+def get_hsc_lbg(dropout='g'):
+    lbg = Table.read(datadir + '/lss/HSC_LBG/HSC_LBG_%s.fits' % dropout)
+    rand = Table.read(datadir + '/lss/HSC_LBG/HSC_LBG_%s_randoms.fits' % dropout)
+    return lbg, rand

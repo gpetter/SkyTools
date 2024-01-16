@@ -49,7 +49,7 @@ def filter_table_property(t, prop, minval=None, maxval=None, inclusive=True):
             t = t[np.where(t[prop] < maxval)]
     return t
 
-def plot_catalog_skydist(cat):
+def plot_catalog_skydist(cat, nsides=32):
     from . import healpixhelper
     import healpy as hp
     dens = healpixhelper.healpix_density_map(lons=cat['RA'], lats=cat['DEC'], nsides=32, deg2=True)
