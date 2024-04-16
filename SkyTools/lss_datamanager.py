@@ -69,6 +69,7 @@ def reduce_desiEDR_lrg(main=True):
     Prepare DESI EDR LRG catalogs
 
     """
+    import glob
     thisdir = rawdir + 'desi_edr/'
     outdir = datadir + '/lss/desiLRG_edr/'
     if main:
@@ -77,8 +78,17 @@ def reduce_desiEDR_lrg(main=True):
         mainkey = ''
     lrg_n = Table.read(thisdir + 'LRG%s_N_clustering.dat.fits' % mainkey)
     lrg_s = Table.read(thisdir + 'LRG%s_S_clustering.dat.fits' % mainkey)
-    lrg_rand_n = Table.read(thisdir + 'LRG%s_N_0_clustering.ran.fits' % mainkey)
-    lrg_rand_s = Table.read(thisdir + 'LRG%s_S_0_clustering.ran.fits' % mainkey)
+    randfiles_n = glob.glob(thisdir + 'LRG%s_N_*_clustering.ran.fits' % mainkey)
+    randfiles_s = glob.glob(thisdir + 'LRG%s_S_*_clustering.ran.fits' % mainkey)
+    randoms = []
+    for j in range(len(randfiles_n)):
+        randoms.append(Table.read(randfiles_n[j]))
+
+    lrg_rand_n = vstack(randoms)
+    randoms = []
+    for j in range(len(randfiles_s)):
+        randoms.append(Table.read(randfiles_s[j]))
+    lrg_rand_s = vstack(randoms)
 
     lrg_n['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(lrg_n['Z']))
     lrg_s['CHI'] = hubbleunits.add_h_to_scale(cosmo.comoving_distance(lrg_s['Z']))
@@ -130,6 +140,15 @@ def reduce_desiEDR_elg(notqso=True):
     lrg_rand.write(outdir + 'desiELG_edr_randoms.fits', overwrite=True)
 
 def reduce_ebossQSO(rezaie=True, combine=True, nrandratio=20):
+    """
+    Prepare eBOSS quasar LSS catalogs from either Rezaie+21 or Ross+20
+    Parameters
+    ----------
+    rezaie: True if Rezaie, False if Ross
+    combine: combine the north and south galactic caps, otherwise just get north
+    nrandratio: number of randoms compared to number of data points
+
+    """
     thisdir = rawdir + 'eBOSS/QSO/'
     outdir = datadir + '/lss/eBOSS_QSO/'
     if rezaie:
@@ -250,6 +269,17 @@ def reduce_ebossQSO(rezaie=True, combine=True, nrandratio=20):
 
 
 def reduce_eBOSS_LRGs(cmass=True, nrandratio=20):
+    """
+    Prepare eBOSS LRG LSS catalogs from Ross+20
+    Parameters
+    ----------
+    cmass: include CMASS galaxies
+    nrandratio
+
+    Returns
+    -------
+
+    """
     thisdir = rawdir + 'eBOSS/LRG/'
     outdir = datadir + '/lss/eBOSS_LRG/'
 
@@ -299,11 +329,17 @@ def reduce_quaia():
         qso = Table.read(thisdir + 'quaia_G%s.fits' % mag)
         qso.rename_column('redshift_quaia', 'Z')
         qso.rename_column('redshift_quaia_err', 'Zerr')
+        qso.rename_column('phot_g_mean_mag', 'G')
+        qso.rename_column('phot_rp_mean_mag', 'RP')
+        qso.rename_column('phot_bp_mean_mag', 'BP')
+        qso.rename_column('mag_w1_vg', 'W1')
+        qso.rename_column('mag_w2_vg', 'W2')
 
         qso.rename_column('ra', 'RA')
         qso.rename_column('dec', 'DEC')
         qso['RA'] = np.array(qso['RA'])
         qso['DEC'] = np.array(qso['DEC'])
+
 
         rand = Table.read(thisdir + 'random_G%s.fits' % mag)
         rand.rename_columns(['ra', 'dec'], ['RA', 'DEC'])
@@ -314,10 +350,13 @@ def reduce_quaia():
         gaiafull = Table.read(datadir + '/QSO_cats/gaia/gaiadr3_qsocandidates.fits')
 
         fullmatch, qso = coordhelper.match_coords(gaiafull, qso, max_sep=1., symmetric=False)
+        qso['e_G'] = fullmatch['e_Gmag']
+        qso['e_RP'] = fullmatch['e_RPmag']
+        qso['e_BP'] = fullmatch['e_BPmag']
         # choose objects which are selected on gaia properties, not by matches to outside quasar catalogs
         qso = qso[np.where(
             (fullmatch['ClassDSCC'] == 'quasar') | (fullmatch['ClassDCSSA'] == 'quasar') | (fullmatch['Class'] == 'AGN'))]
-
+        qso = qso['RA', 'DEC', 'Z', 'Zerr', 'G', 'BP', 'RP', 'e_G', 'e_BP', 'e_RP', 'W1', 'W2']
         qso.write(outdir + 'quaia%s.fits' % mag, overwrite=True)
         rand.write(outdir + 'quaia_randoms%s.fits' % mag, overwrite=True)
 
@@ -477,3 +516,91 @@ def get_hsc_lbg(dropout='g'):
     lbg = Table.read(datadir + '/lss/HSC_LBG/HSC_LBG_%s.fits' % dropout)
     rand = Table.read(datadir + '/lss/HSC_LBG/HSC_LBG_%s_randoms.fits' % dropout)
     return lbg, rand
+
+
+def overlap_weights_1d(prop_arr, prop_range, nbins):
+    hists = []
+    for j in range(len(prop_arr)):
+        hist, binedges = np.histogram(prop_arr[j], bins=nbins, range=prop_range, density=True)
+        hists.append(hist)
+    hists = np.array(hists)
+    min_hist = np.amin(hists, axis=0)
+    weights = []
+    for j in range(len(prop_arr)):
+        dist_ratio = min_hist / hists[j]
+        dist_ratio[np.where(np.isnan(dist_ratio) | np.isinf(dist_ratio))] = 0
+        weights.append(dist_ratio[np.digitize(prop_arr[j], bins=binedges)-1])
+    return weights
+
+
+
+def overlap_weights_2d(prop1_arr, prop2_arr, prop1_range, prop2_range, nbins):
+    from scipy import stats, interpolate
+    hists, bin_locs = [], []
+
+    for j in range(len(prop1_arr)):
+        thishist = stats.binned_statistic_2d(prop1_arr[j], prop2_arr[j], None, statistic='count',
+                                             bins=[nbins[0], nbins[1]],
+                                             range=[[prop1_range[0] - 0.001, prop1_range[1] + 0.001],
+                                                    [prop2_range[0] - 0.001, prop2_range[1] + 0.001]],
+                                             expand_binnumbers=True)
+        normed_hist = thishist[0] / np.sum(thishist[0])
+        hists.append(normed_hist)
+        bin_locs.append(np.array(thishist[3]) - 1)
+
+    hists = np.array(hists)
+    min_hist = np.amin(hists, axis=0)
+    weights = []
+
+    for j in range(len(prop1_arr)):
+        dist_ratio = min_hist / hists[j]
+        dist_ratio[np.where(np.isnan(dist_ratio) | np.isinf(dist_ratio))] = 0
+        bin_idxs = bin_locs[j]
+        weights.append(dist_ratio[bin_idxs[0], bin_idxs[1]])
+    return weights
+
+
+def match_random_zdist(samplecat, randomcat, nbins=15):
+    randminz = np.min(randomcat['Z'])
+    randmaxz = np.max(randomcat['Z'])
+    zhist, edges = np.histogram(samplecat['Z'], bins=nbins, range=(randminz-1e-3, randmaxz+1e-3), density=True)
+    randhist, edges = np.histogram(randomcat['Z'], bins=nbins, range=(randminz-1e-3, randmaxz+1e-3), density=True)
+    ratio = zhist/randhist
+    sampleweights = ratio[np.digitize(randomcat['Z'], bins=edges) - 1]
+    randomcat['weight'] *= sampleweights
+    #subrandcat = randomcat[np.random.choice(len(randomcat), size=(10*len(samplecat)), replace=False, p=(sampleweights / np.sum(sampleweights)))]
+    return randomcat
+
+def weight_common_dndz(cat1, cat2, zbins=15):
+    minz1, maxz1 = np.min(cat1['Z'])-1e-3, np.max(cat1['Z']+1e-3)
+    minz2, maxz2 = np.min(cat2['Z'])-1e-3, np.max(cat2['Z']+1e-3)
+    minz = np.min([minz1, minz2])
+    maxz = np.max([maxz1, maxz2])
+    zhist1, edges = np.histogram(cat1['Z'], bins=zbins, range=(minz, maxz), density=True)
+    zhist2, edges = np.histogram(cat2['Z'], bins=zbins, range=(minz, maxz), density=True)
+    dndz_product = np.sqrt(zhist1 * zhist2)
+    ratio1 = zhist1/dndz_product
+    ratio2 = zhist2/dndz_product
+    cat1['zweight'] = ratio1[np.digitize(cat1['Z'], bins=edges) - 1]
+    cat2['zweight'] = ratio2[np.digitize(cat2['Z'], bins=edges) - 1]
+    cat1['weight'] *= cat1['zweight']
+    cat2['weight'] *= cat2['zweight']
+    return cat1, cat2
+
+
+def rolling_percentile_selection(cat, prop, minpercentile, maxpercentile=100, nzbins=100):
+    """
+    choose highest nth percentile of e.g. luminosity in bins of redshift
+    """
+    minz, maxz = np.min(cat['Z']), np.max(cat['Z'])
+    zbins = np.linspace(minz, maxz, nzbins)
+    idxs = []
+    for j in range(len(zbins)-1):
+        catinbin = cat[np.where((cat['Z'] > zbins[j]) & (cat['Z'] <= zbins[j+1]))]
+        thresh = np.percentile(catinbin[prop], minpercentile)
+        hithresh = np.percentile(catinbin[prop], maxpercentile)
+        idxs += list(np.where((cat[prop] > thresh) & (cat[prop] <= hithresh) &
+                              (cat['Z'] > zbins[j]) & (cat['Z'] <= zbins[j+1]))[0])
+
+    newcat = cat[np.array(idxs)]
+    return newcat

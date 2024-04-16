@@ -52,6 +52,6 @@ def filter_table_property(t, prop, minval=None, maxval=None, inclusive=True):
 def plot_catalog_skydist(cat, nsides=32):
     from . import healpixhelper
     import healpy as hp
-    dens = healpixhelper.healpix_density_map(lons=cat['RA'], lats=cat['DEC'], nsides=32, deg2=True)
+    dens = healpixhelper.healpix_density_map(cat, nsides=32, deg2=True)
     mollmap = hp.mollview(dens)
     return mollmap

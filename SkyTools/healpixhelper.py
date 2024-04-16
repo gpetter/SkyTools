@@ -1,17 +1,89 @@
 import healpy as hp
 import numpy as np
 from scipy import stats
+from astropy.table import Table
 
-# take a binary mask and properly downgrade it to a lower resolution, expanding the mask to cover all pixels which
-# touch bad pixels in the high res map
+def filled_map(nside, fillval=0.):
+	"""
+
+	Parameters
+	----------
+	nside
+	fillval
+
+	Returns
+	-------
+
+	"""
+	if fillval == 0:
+		return np.zeros(hp.nside2npix(nside=nside))
+	else:
+		return fillval * np.ones(hp.nside2npix(nside=nside))
+
 def proper_ud_grade_mask(mask, newnside):
-	mask_lowres_proper = hp.ud_grade(mask.astype(float), nside_out=newnside).astype(float)
+	"""
+	take a binary mask and properly downgrade it to a lower resolution, expanding the mask to cover all pixels which
+	touch bad pixels in the high-res map
+	Parameters
+	----------
+	mask
+	newnside
+
+	Returns
+	-------
+
+	"""
+	mask_lowres_proper = hp.ud_grade(np.copy(mask).astype(float), nside_out=newnside).astype(float)
 	mask_lowres_proper = np.where(mask_lowres_proper == 1., True, False).astype(bool)
 	return mask_lowres_proper
 
 
-# for a given source list with ras and decs, create a healpix map of source density for a given pixel size
-def healpix_density_map(lons, lats, nsides, weights=None, deg2=False, nest=False):
+def rotate_mask(mask, coords=['C', 'G'], conservative=True):
+	"""
+
+	https://stackoverflow.com/questions/68010539/healpy-rotate-a-mask-
+	together-with-the-map-in-hp-ma-vs-separately-produce-di#
+
+	:param mask: healpix mask, 1/True==observed
+	:param coords: G: galactic, C: celestial, E: ecliptic
+	:param conservative: only keep good pixels where 100% was observed
+	:return:
+	"""
+	mask = np.array(mask, dtype=bool)
+	transform = hp.Rotator(coord=coords)
+
+	m = hp.ma(np.arange(len(mask), dtype=np.float32))
+	m.mask = mask
+
+	# if you use a float mask and rotate, healpix interpolates near border
+	if conservative:
+		rotated_mask = transform.rotate_map_pixel(m.mask)
+		# round the interpolated values to 0 or 1
+		return np.around(rotated_mask)
+	# otherwise, healpix just rotates the binary mask without interpolation, might be unsafe
+	else:
+		return transform.rotate_map_pixel(m.mask)
+
+
+def healpix_density_map(cat_or_coords, nsides, weights=None, deg2=False, nest=False):
+	"""
+	for a given source list with ras and decs, create a healpix map of source density for a given pixel size
+	Parameters
+	----------
+	cat_or_coords: astropy table including RA, DEC columns OR tuple of (lon, lat)
+	nsides
+	weights
+	deg2
+	nest
+
+	Returns
+	-------
+
+	"""
+	if type(cat_or_coords) == Table:
+		lons, lats = cat_or_coords['RA'], cat_or_coords['DEC']
+	else:
+		lons, lats = cat_or_coords
 	# convert coordinates to healpix pixels
 	pix_of_sources = hp.ang2pix(nsides, lons, lats, lonlat=True, nest=nest)
 	# number of pixels for healpix map with nsides
@@ -25,9 +97,25 @@ def healpix_density_map(lons, lats, nsides, weights=None, deg2=False, nest=False
 	return density_map
 
 
-def healpix_average_in_pixels(ras, decs, nsides, values):
+def healpix_average_in_pixels(cat_or_coords, nsides, values):
+	"""
+	Make a healpix map by taking average value associated with a list of coordinates
+	Parameters
+	----------
+	cat_or_coords: astropy table including RA, DEC columns OR tuple of (lon, lat)
+	nsides
+	values
+
+	Returns
+	-------
+
+	"""
+	if type(cat_or_coords) == Table:
+		lons, lats = cat_or_coords['RA'], cat_or_coords['DEC']
+	else:
+		lons, lats = cat_or_coords
 	# convert coordinates to healpix pixels
-	pix_of_sources = hp.ang2pix(nsides, ras, decs, lonlat=True)
+	pix_of_sources = hp.ang2pix(nsides, lons, lats, lonlat=True)
 	# number of pixels for healpix map with nsides
 	npix = hp.nside2npix(nsides)
 	# average in each pixel is weighted sum divided by total sum
@@ -36,11 +124,27 @@ def healpix_average_in_pixels(ras, decs, nsides, values):
 	return avg_map
 
 
-def healpix_median_in_pixels(nside, coords, values):
+def healpix_median_in_pixels(cat_or_coords, nsides, values):
+	"""
+	Make a healpix map by taking median value associated with a list of coordinates
+	Parameters
+	----------
+	cat_or_coords: astropy table including RA, DEC columns OR tuple of (lon, lat)
+	nsides
+	values
+
+	Returns
+	-------
+
+	"""
+	if type(cat_or_coords) == Table:
+		lons, lats = cat_or_coords['RA'], cat_or_coords['DEC']
+	else:
+		lons, lats = cat_or_coords
 	# convert coordinates to healpix pixels
-	pix_of_sources = hp.ang2pix(nside, coords[0], coords[1], lonlat=True)
+	pix_of_sources = hp.ang2pix(nsides, lons, lats, lonlat=True)
 	# number of pixels for healpix map with nsides
-	npix = hp.nside2npix(nside)
+	npix = hp.nside2npix(nsides)
 	medmap = np.array(stats.binned_statistic(x=pix_of_sources, values=values,
 							statistic='median', bins=np.linspace(-0.5, npix - 0.5, npix + 1))[0])
 
@@ -79,9 +183,18 @@ def ud_grade_median(m, nside_out, reorder=True):
 
 
 def healpixels2lon_lat(hpmap):
-	nside = hp.npix2nside(len(hpmap))
-	lons, lats = hp.pix2ang(nside, np.arange(len(hpmap)), lonlat=True)
-	return lons, lats
+	"""
+	Pass healpix map and get longitude, latitudes of every pixel
+	Parameters
+	----------
+	hpmap
+
+	Returns
+	-------
+
+	"""
+	return hp.pix2ang(hp.npix2nside(len(hpmap)), np.arange(len(hpmap)), lonlat=True)
+
 
 
 def fractional_overdensity_map(hpmap):
@@ -98,13 +211,12 @@ def fractional_overdensity_map(hpmap):
 	mapmean = np.nanmean(hpmap)
 	return (hpmap - mapmean) / mapmean
 
-def coords2mapvalues(lons, lats, map, nest=False):
+def coords2mapvalues(cat_or_coords, map, nest=False):
 	"""
 	Get healpix map values at specfied coordinates
 	Parameters
 	----------
-	lons: array
-	lats: array
+	cat_or_coords: astropy table including RA, DEC columns OR tuple of (lon, lat)
 	map: array
 
 	Returns
@@ -112,6 +224,10 @@ def coords2mapvalues(lons, lats, map, nest=False):
 	values of map in pixels corresponding to coordinates
 
 	"""
+	if type(cat_or_coords) == Table:
+		lons, lats = cat_or_coords['RA'], cat_or_coords['DEC']
+	else:
+		lons, lats = cat_or_coords
 	nside = hp.npix2nside(len(map))
 	pix = hp.ang2pix(nside, lons, lats, lonlat=True, nest=nest)
 	return map[pix]
@@ -170,6 +286,18 @@ def change_coord(m, coord):
 
 
 def masked_smoothing(U, fwhm_arcmin=15):
+	"""
+	Credit to David at https://stackoverflow.com/questions/50009141/smoothing-without-filling-missing-values-with-zeros
+	Smooth a map where a mask is applied, ignoring the masked region
+	Parameters
+	----------
+	U
+	fwhm_arcmin
+
+	Returns
+	-------
+
+	"""
 	V = U.copy()
 	maskedidx = (U != U)
 	V[maskedidx] = 0
@@ -241,34 +369,45 @@ def mask_from_pointings(coords, nside, pointing_radius=None, pointing_side=None,
 
 
 
-def query_annulus(nside, vec, inner_rad, outer_rad):
+
+
+def query_annulus_coord(nside, coord, inner_rad, outer_rad):
 	"""
 	Query the pixels in an annulus between r_min and r_max away from a central point
-
 	Parameters
 	----------
-	nside: int
-	vec: 3 tuple
-	inner_rad: float in degrees
-	outer_rad: float in degrees
-
+	nside
+	coord
+	inner_rad
+	outer_rad
 
 	Returns
-	-------
 	indices within the annulus
 
 	"""
-	big_disc = hp.query_disc(nside, vec, np.radians(outer_rad))
-	small_disc = hp.query_disc(nside, vec, np.radians(inner_rad), inclusive=True)
-	# find indices which are in big_disc but not small_disc
-	annulus = np.setdiff1d(big_disc, small_disc, assume_unique=True)
-	return annulus
-
-def query_annulus_coord(nside, coord, inner_rad, outer_rad):
+	def query_annulus(nside, vec, inner_rad, outer_rad):
+		# helper to translate from coordinate tuple to vector
+		big_disc = hp.query_disc(nside, vec, np.radians(outer_rad))
+		small_disc = hp.query_disc(nside, vec, np.radians(inner_rad), inclusive=True)
+		# find indices which are in big_disc but not small_disc
+		annulus = np.setdiff1d(big_disc, small_disc, assume_unique=True)
+		return annulus
 	vec = hp.ang2vec(coord[0], coord[1], lonlat=True)
 	return query_annulus(nside, vec, inner_rad, outer_rad)
 
 def query_disc_coord(nside, coord, radius_deg):
+	"""
+	Default healpy query_disc requires you to pass a 3-vector, this lets you pass a longitude, latitude instead
+	Parameters
+	----------
+	nside
+	coord
+	radius_deg
+
+	Returns
+	-------
+
+	"""
 	return hp.query_disc(nside, hp.ang2vec(coord[0], coord[1], lonlat=True), np.radians(radius_deg))
 
 def retract_mask(mask, orders_below=1, nside_out=None, all_neighbors=True):
@@ -328,12 +467,12 @@ def retract_mask(mask, orders_below=1, nside_out=None, all_neighbors=True):
 
 	return np.array(newmask, dtype=int)
 
-def inmask(coords, mask, return_bool=False):
+def inmask(cat_or_coords, mask, return_bool=False):
 	"""
 
 	Parameters
 	----------
-	coords: tuple (ra, dec) or (l, b) etc.
+	cat_or_coords:
 	mask: array
 	binary mask where 1 is good, 0 is bad
 	return_bool: bool
@@ -345,16 +484,34 @@ def inmask(coords, mask, return_bool=False):
 	indices where coordinates are within the mask, or boolean array for passing the mask
 
 	"""
-	# resolution of input mask
-	nside = hp.npix2nside(len(mask))
+	if type(cat_or_coords) == Table:
+		lons, lats = cat_or_coords['RA'], cat_or_coords['DEC']
+	else:
+		lons, lats = cat_or_coords
+
 	# convert coordinates to healpixels
-	coordpix = hp.ang2pix(nside, coords[0], coords[1], lonlat=True)
+	coordpix = hp.ang2pix(hp.npix2nside(len(mask)), lons, lats, lonlat=True)
 	if return_bool:
 		good = np.array((mask[coordpix] == 1), dtype=bool)
 	else:
 		# get indices of those passing the mask
 		good = np.where(mask[coordpix] == 1)[0]
 	return good
+
+def cat_in_mask(cat, mask):
+	"""
+	Return subset of catalog which lies inside the window
+	Parameters
+	----------
+	cat
+	mask
+
+	Returns
+	-------
+
+	"""
+	good = inmask(cat_or_coords=cat, mask=mask)
+	return cat[good]
 
 
 def subtract_dipole(

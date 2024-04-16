@@ -1,5 +1,4 @@
 from mocpy import MOC
-import mhealpy as mhp
 import healpy as hp
 import numpy as np
 import glob
@@ -68,6 +67,7 @@ def make_unwise_bitmask(max_order, low_nside):
 
 
 def assef_moc_mask():
+	import mhealpy as mhp
 	import healpixhelper
 	maxorder = 15
 	sources = 'HII'
